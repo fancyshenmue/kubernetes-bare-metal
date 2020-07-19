@@ -15,7 +15,7 @@
     - [required script and config on sample-haproxy-001](#required-script-and-config-on-sample-haproxy-001)
     - [required script and config on sample-haproxy-002](#required-script-and-config-on-sample-haproxy-002)
     - [Configure firewalld on all haproxy server](#Configure-firewalld-on-all-haproxy-server)
-  - [Tuning systemc parameters on all kubernetes server](#Tuning-systemc-parameters-on-all-kubernetes-server)
+  - [Tuning system parameters on all kubernetes server](#Tuning-system-parameters-on-all-kubernetes-server)
   - [Install kubelet on all kubernetes server](#Install-kubelet-on-all-kubernetes-server)
   - [Initial Kubernetes Cluster](#Initial-Kubernetes-Cluster)
     - [Initail kubernetes master on sample-kube-master-001](#Initail-kubernetes-master-on-sample-kube-master-001)
@@ -577,7 +577,7 @@ firewall-cmd --direct --permanent --add-rule ipv4 filter INPUT 0 --in-interface 
 firewall-cmd --reload
 ```
 
-## Tuning systemc parameters on all kubernetes server
+## Tuning system parameters on all kubernetes server
 ``` shell
 export _MODULES_BR_NETFILTER="/etc/modules-load.d/br_netfilter.conf"
 export _SYSCTL_CONF="/etc/sysctl.d/kubernetes.conf"
