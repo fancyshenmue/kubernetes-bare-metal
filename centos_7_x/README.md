@@ -715,7 +715,7 @@ kubeadm join sample-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
     --discovery-token-ca-cert-hash sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681
 ```
 - #### Copy `--token` value `rvx4te.nxupiekihv8j03p7` (export _KUBE_TOKEN=rvx4te.nxupiekihv8j03p7)
-- #### Copy `--discovery-token-ca-cert-hash` value `sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681` (export DISCOVERY_TOKEN_CA_CERT_HASH=ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681)
+- #### Copy `--discovery-token-ca-cert-hash` value `sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681` (export _KUBE_DISCOVERY_TOKEN_CA_CERT_HASH=ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681)
 
 ### Get certificate_key on sample-kube-master-001
 ``` shell
@@ -730,7 +730,7 @@ W0114 14:20:56.652957   18849 validation.go:28] Cannot validate kube-proxy confi
 [upload-certs] Using certificate key:
 12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4
 ```
-- #### Copy `12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4` (export CERTIFICATE_KEY=12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4)
+- #### Copy `12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4` (export _KUBE_CERTIFICATE_KEY=12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4)
 
 ### Remove temp file
 ``` shell
