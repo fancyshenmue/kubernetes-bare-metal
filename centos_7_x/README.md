@@ -4,16 +4,16 @@
 - [Build Bare Metal Kubernetes on CentOS 7.x](#Build-Bare-Metal-Kubernetes-on-CentOS-7.x)
   - [Table of contents](#Table-of-contents)
   - [Requirement](#Requirement)
-  - [Add /etc/hosts (local and server)](#Add-/etc/hosts-local-and-server)
-  - [Install Haproxy (sample-haproxy)](#Install-Haproxy-(sample-haproxy))
-  - [Configure Haproxy (sample-haproxy)](#Configure-Haproxy-(sample-haproxy))
-  - [Install Keepalived and Conntrack (sample-haproxy)](#Install-Keepalived-and-Conntrack-(sample-haproxy))
-  - [Configure Keepalived and Conntrack (sample-haproxy)](#Configure-Keepalived-and-Conntrack-(sample-haproxy))
-    - [export environment (sample-haproxy)](#export-environment-(sample-haproxy))
-    - [required directory (sample-haproxy)](#required-directory-(sample-haproxy))
-    - [required script (sample-haproxy)](#required-script-(sample-haproxy))
-    - [required script and config (sample-haproxy-001)](#required-script-and-config-(sample-haproxy-001))
-    - [required script and config (sample-haproxy-002)](#required-script-and-config-(sample-haproxy-002))
+  - [Add /etc/hosts on local and server](#Add-/etc/hosts-on-local-and-server)
+  - [Install haproxy on all haproxy server](#Install-haproxy-on-all-haproxy-server)
+  - [Configure haproxy on all haproxy server](#Configure-haproxy-on-all-haproxy-server)
+  - [Install keepalived and conntrack on all haproxy server](#Install-keepalived-and-conntrack-on-all-haproxy-server)
+  - [Configure keepalived and conntrack](#Configure-Keepalived-and-Conntrack)
+    - [export environment on all haproxy server](#export-environment-on-all-haproxy-server)
+    - [required directory on all haproxy server](#required-directory-on-all-haproxy-server)
+    - [required script on all haproxy server](#required-script-on-all-haproxy-server)
+    - [required script and config on sample-haproxy-001](#required-script-and-config-on-sample-haproxy-001)
+    - [required script and config on sample-haproxy-002](#required-script-and-config-on-sample-haproxy-002)
 
 ## Requirement
 - CentOS 7.x * 8
@@ -21,7 +21,7 @@
     - kubernetes master * 3
     - kubernetes worker * 3
 
-## Add /etc/hosts (local and server)
+## Add /etc/hosts on local and server
 ``` shell
 export _HAPROXY_1="10.10.10.11 sample-haproxy-001"
 export _HAPROXY_2="10.10.10.12 sample-haproxy-002"
@@ -44,7 +44,7 @@ ${_KUBE_WORKER_3}
 EOF
 ```
 
-## Install Haproxy (sample-haproxy)
+## Install Haproxy on all haproxy server
 ``` shell
 export _HAPROXY_RPM="https://github.com/fancyshenmue/rpms.git"
 export _TEMP_WORK_DIRECTORY="/tmp"
@@ -56,7 +56,7 @@ rpm -hiv ${_RPM_PATH}
 rm -fr ${_TEMP_WORK_DIRECTORY}/rpms
 ```
 
-## Configure Haproxy (sample-haproxy)
+## Configure Haproxy on all haproxy server
 ``` shell
 export _KUBE_MASTER_1_IP="10.10.10.13"
 export _KUBE_MASTER_2_IP="10.10.10.14"
@@ -145,15 +145,15 @@ backend ${_HAPROXY_BACKEND_HTTPS_WORKDER}
 EOF
 ```
 
-## Install Keepalived and Conntrack (sample-haproxy)
+## Install keepalived and conntrack on all haproxy server
 ``` shell
 export _PACKAGE="keepalived ipvsadm psmisc conntrack-tools"
 
 yum install -y ${_PACKAGE}
 ```
 
-## Configure Keepalived and Conntrack (sample-haproxy)
-### export environment (sample-haproxy)
+## Configure keepalived and conntrack
+### export environment on all haproxy server
 ``` shell
 export _CONNTRACKD_ROOT=/etc/conntrackd
 export _CONNTRACKD_CONF=${_CONNTRACKD_ROOT}/conntrackd.conf
@@ -165,11 +165,11 @@ export _KEEPALIVED_SCRIPT_IPTABLES=${_KEEPALIVED_SCRIPT_ROOT}/iptables.sh
 export _KEEPALIVED_SCRIPT_HAPROXY_HEALTHCHECK=${_KEEPALIVED_SCRIPT_ROOT}/haproxy_healthcheck.sh
 export _KEEPALIVED_SCRIPT_SET_STATE=${_KEEPALIVED_SCRIPT_ROOT}/set_state.sh
 ```
-### required directory (sample-haproxy)
+### required directory on all haproxy server
 ``` shell
 mkdir -p ${_CONNTRACKD_ROOT} ${_KEEPALIVED_SCRIPT_ROOT}
 ```
-### required script (sample-haproxy)
+### required script on all haproxy server
 ``` shell
 # conntrackd.sh
 cat >> ${_KEEPALIVED_SCRIPT_CONNTRACKD} << 'EOF'
@@ -336,7 +336,7 @@ cat >> ${_KEEPALIVED_SCRIPT_SET_STATE} << 'EOF'
 echo instance $1 is in $2 state > /var/run/keepalive.state
 EOF
 ```
-### required script and config (sample-haproxy-001)
+### required script and config on sample-haproxy-001
 ``` shell
 # conntrackd.conf
 export _HAPROXY_1="10.10.10.11"
@@ -446,7 +446,7 @@ vrrp_instance ansible_kube_cluster_haproxy {
 }
 EOF
 ```
-### required script and config (sample-haproxy-002)
+### required script and config on sample-haproxy-002
 ``` shell
 # conntrackd.conf
 export _HAPROXY_1="10.10.10.11"
