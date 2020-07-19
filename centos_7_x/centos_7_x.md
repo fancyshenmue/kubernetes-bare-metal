@@ -4,7 +4,7 @@
 - [Build Bare Metal Kubernetes on CentOS 7.x](#Build-Bare-Metal-Kubernetes-on-CentOS-7.x)
   - [Table of contents](#Table-of-contents)
   - [Requirement](#Requirement)
-  - [Add /etc/hosts (local and server)](#Add-/etc/hosts-(local-and-server))
+  - [Add /etc/hosts (local and server)](#Add-/etc/hosts-local-and-server)
   - [Install Haproxy (sample-haproxy)](#Install-Haproxy-(sample-haproxy))
   - [Configure Haproxy (sample-haproxy)](#Configure-Haproxy-(sample-haproxy))
   - [Install Keepalived and Conntrack (sample-haproxy)](#Install-Keepalived-and-Conntrack-(sample-haproxy))
