@@ -714,7 +714,7 @@ Then you can join any number of worker nodes by running the following on each as
 kubeadm join sample-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
     --discovery-token-ca-cert-hash sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681
 ```
-- #### Copy `--token` value `rvx4te.nxupiekihv8j03p7` (export _KUBE_TOKEN=$(kubeadm token generate))
+- #### Copy `--token` value `rvx4te.nxupiekihv8j03p7` (export _KUBE_TOKEN=rvx4te.nxupiekihv8j03p7)
 - #### Copy `--discovery-token-ca-cert-hash` value `sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681` (export DISCOVERY_TOKEN_CA_CERT_HASH=ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681)
 
 ### Get certificate_key on sample-kube-master-001
