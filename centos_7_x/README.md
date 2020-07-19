@@ -431,7 +431,7 @@ vrrp_script check_haproxy {
     fall 4
 }
 
-vrrp_instance ansible_kube_cluster_haproxy {
+vrrp_instance sample_haproxy {
     state ${_KEEPALIVED_STATE}
     interface eth0
     virtual_router_id 246
@@ -541,7 +541,7 @@ vrrp_script check_haproxy {
     fall 4
 }
 
-vrrp_instance ansible_kube_cluster_haproxy {
+vrrp_instance sample_haproxy {
     state ${_KEEPALIVED_STATE}
     interface eth0
     virtual_router_id 246
@@ -705,13 +705,13 @@ Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
 You can now join any number of control-plane nodes by copying certificate authorities
 and service account keys on each node and then running the following as root:
 
-  kubeadm join ansible-kube-cluster-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
+  kubeadm join sample-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
     --discovery-token-ca-cert-hash sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681 \
     --control-plane
 
 Then you can join any number of worker nodes by running the following on each as root:
 
-kubeadm join ansible-kube-cluster-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
+kubeadm join sample-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
     --discovery-token-ca-cert-hash sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681
 ```
 - #### Copy `--token` value `rvx4te.nxupiekihv8j03p7` (export _KUBE_TOKEN=$(kubeadm token generate))
