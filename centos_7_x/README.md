@@ -14,6 +14,18 @@
     - [required script on all haproxy server](#required-script-on-all-haproxy-server)
     - [required script and config on sample-haproxy-001](#required-script-and-config-on-sample-haproxy-001)
     - [required script and config on sample-haproxy-002](#required-script-and-config-on-sample-haproxy-002)
+    - [Configure firewalld on all haproxy server](#Configure-firewalld-on-all-haproxy-server)
+  - [Tuning systemc parameters on all kubernetes server](#Tuning-systemc-parameters-on-all-kubernetes-server)
+  - [Install kubelet on all kubernetes server](#Install-kubelet-on-all-kubernetes-server)
+  - [Initial Kubernetes Cluster](#Initial-Kubernetes-Cluster)
+    - [Initail kubernetes master on sample-kube-master-001](#Initail-kubernetes-master-on-sample-kube-master-001)
+    - [Get certificate_key on sample-kube-master-001](#Get-certificate_key-on-sample-kube-master-001)
+    - [Remove temp file](#Remove-temp-file)
+    - [Get Kubernetes API Config](#Get-Kubernetes-API-Config)
+    - [Initial CNI network](#Initial-CNI-network)
+    - [Join Kubernetes Cluster on other Master Node](#Join-Kubernetes-Cluster-on-other-Master-Node)
+  - [Kubernetes Dashbaord](#Kubernetes-Dashbaord)
+  - [Metrics Server](#Metrics-Server)
 
 ## Requirement
 - CentOS 7.x * 8
@@ -555,4 +567,365 @@ vrrp_instance ansible_kube_cluster_haproxy {
     }
 }
 EOF
+```
+
+## Configure firewalld on all haproxy server
+``` shell
+firewall-cmd --direct --permanent --add-rule ipv4 filter INPUT 0 --in-interface eth0 --destination 224.0.0.18 --protocol vrrp -j ACCEPT
+firewall-cmd --reload
+```
+
+## Tuning systemc parameters on all kubernetes server
+``` shell
+export _MODULES_BR_NETFILTER="/etc/modules-load.d/br_netfilter.conf"
+export _SYSCTL_CONF="/etc/sysctl.d/kubernetes.conf"
+export _SECURITY_LIMITS="/etc/security/limits.d/kubernetes.conf"
+
+cat >> ${_MODULES_BR_NETFILTER} << EOF
+br_netfilter
+EOF
+
+cat >> ${_SYSCTL_CONF} << EOF
+net.ipv4.ip_forward=1
+net.bridge.bridge-nf-call-ip6tables=1
+net.bridge.bridge-nf-call-iptables=1
+EOF
+
+cat >> ${_SECURITY_LIMITS} << EOF
+*  soft  nofile  1000000
+*  hard  nofile  1000000
+*  soft  nproc   1000000
+*  hard  nproc   1000000
+EOF
+```
+
+## Install kubelet on all kubernetes server
+``` shell
+export _KUBE_REPO="/etc/yum.repos.d/kubernetes.repo"
+export _PACKAGE="kubelet-1.17.0-0 kubeadm-1.17.0-0 kubectl-1.17.0-0"
+
+cat >> ${_KUBE_REPO} << EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+yum install -y ${_PACKAGE}
+```
+
+## Initail kubernetes master on sample-kube-master-001
+``` shell
+export _WORK_DIR=~/temp
+export _KUBEADM_CONFIG_FILE="kubeadm-config.yaml"
+export _KUBE_TOKEN=$(kubeadm token generate)
+export _KUBE_HAPROXY="sample-haproxy"
+export _KUBE_HAPROXY_IP="10.10.10.19"
+export _KUBE_HAPROXY_PORT="6443"
+export _KUBE_CLUSTER_NAME="sample-kube-cluster"
+export _KUBE_NODEREGISTRATION_NAME="sample-kube-master-001"
+export _KUBE_KUBERNETES_VERSION="v1.17.0"
+export _KUBE_SERVICE_SUBNET="10.96.0.0/12"
+export _KUBE_POD_SUBNET="10.244.0.0/16"
+export _KUBE_ADVERTISE_ADDRESS="10.10.10.13"
+
+mkdir -p ${_WORK_DIR}
+cd ${_WORK_DIR}
+
+cat > ${_KUBEADM_CONFIG_FILE} << END
+apiVersion: kubeadm.k8s.io/v1beta2
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: ${_KUBE_TOKEN}
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: ${_KUBE_ADVERTISE_ADDRESS}
+  bindPort: 6443
+nodeRegistration:
+  criSocket: /var/run/dockershim.sock
+  name: ${_KUBE_NODEREGISTRATION_NAME}
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+---
+apiServer:
+  timeoutForControlPlane: 4m0s
+apiVersion: kubeadm.k8s.io/v1beta2
+certificatesDir: /etc/kubernetes/pki
+clusterName: ${_KUBE_CLUSTER_NAME}
+controlPlaneEndpoint: "${HA_PROXY}:${HA_PROXY_PORT}"
+controllerManager: {}
+dns:
+  type: CoreDNS
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+imageRepository: k8s.gcr.io
+kind: ClusterConfiguration
+kubernetesVersion: ${_KUBE_KUBERNETES_VERSION}
+networking:
+  dnsDomain: ${_KUBE_CLUSTER_NAME}.local
+  serviceSubnet: ${_KUBE_SERVICE_SUBNET}
+  podSubnet: ${_KUBE_POD_SUBNET}
+scheduler: {}
+END
+
+cat >> /etc/hosts << EOF
+
+${_KUBE_HAPROXY_IP} ${_KUBE_HAPROXY}
+EOF
+
+kubeadm init --config=${_KUBEADM_CONFIG_FILE}
+```
+
+#### Output
+``` shell
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+You can now join any number of control-plane nodes by copying certificate authorities
+and service account keys on each node and then running the following as root:
+
+  kubeadm join ansible-kube-cluster-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
+    --discovery-token-ca-cert-hash sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681 \
+    --control-plane
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join ansible-kube-cluster-haproxy:6443 --token rvx4te.nxupiekihv8j03p7 \
+    --discovery-token-ca-cert-hash sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681
+```
+- #### Copy `--token` value `rvx4te.nxupiekihv8j03p7` (export _KUBE_TOKEN=$(kubeadm token generate))
+- #### Copy `--discovery-token-ca-cert-hash` value `sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681` (export DISCOVERY_TOKEN_CA_CERT_HASH=ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681)
+
+### Get certificate_key on sample-kube-master-001
+``` shell
+kubeadm init phase upload-certs --upload-certs
+```
+
+#### Output
+``` shell
+W0114 14:20:56.652884   18849 validation.go:28] Cannot validate kubelet config - no validator is available
+W0114 14:20:56.652957   18849 validation.go:28] Cannot validate kube-proxy config - no validator is available
+[upload-certs] Storing the certificates in Secret "kubeadm-certs" in the "kube-system" Namespace
+[upload-certs] Using certificate key:
+12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4
+```
+- #### Copy `12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4` (export CERTIFICATE_KEY=12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4)
+
+### Remove temp file
+``` shell
+rm -f ${_WORK_DIR}/${_KUBEADM_CONFIG_FILE}
+```
+
+### Get Kubernetes API Config
+``` shell
+cat /etc/kubernetes/admin.conf
+```
+
+#### `Output`
+``` yaml
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUN5RENDQWJDZ0F3SUJBZ0lCQURBTkJna3Foa2lHOXcwQkFRc0ZBREFWTVJNd0VRWURWUVFERXdwcmRXSmwKY201bGRHVnpNQjRYRFRJd01ERXhOREEyTVRrME5Wb1hEVE13TURFeE1UQTJNVGswTlZvd0ZURVRNQkVHQTFVRQpBeE1LYTNWaVpYSnVaWFJsY3pDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTTIvCnRIT21tOVRyZW1MbGdrQTdqWlFYODVRbVlMdlJQWGhPbkJhT1JMRkZJQkI1bEFLQTVDSFBuQzZ6bDc0QWUyRkIKeU1WVEo1OXFMbDB1T3FJZkowNFJJalBNNDg2d0VzNWhUd3dEQmhwU3JlTHVQUWVJYURpSlNJd0lqRVY3N2V1UAp2WXJqZTFmVTJTbXkxNG5rMndvaHlJVUJwcXpSNTdMZmhVS1RHamQ3NGFEVU1wRThkY0ZpWG9seUJZSk41SlQwClZhRG45S0ZjRW80aTVkbE94VnVNRWRkOW92dGx2MlE0VDErZjdTOVIzN1A0YTgzZlFPb0grRk90RTZZakJINlkKOEkxaEt5a2lMQ0tXazZaQXVXUmxRSmF5YnFHRzdIK01LdnV1M3NheFZTd0RqNklZRmlXbktNUkxXQU5Sbnh1cwpTRzRxanQ0NHVlRTc4cHJIZFowQ0F3RUFBYU1qTUNFd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRFd0VCCi93UUZNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFLK0ViTWhMQzZQR2hIcTlTYkxGdjMzUEN4ZTgKeWNETnY5eXY1andxd3dxNThNOWRnV3plcW51NVhORE5WT21qYWErS04yeEJkZFN2d2ZLZTRjenRkYmRwdjh4ZwpNOXFUaHh2NkM3V3ovSkpjU1k0c3FaMk1rTEhSdlRPZEF4NWdHZ0h5YXJBVm1xand1dzJTRHVaU3huUXQ2NnBDCmVvczl5M1p5cnU1NXBwTmEvdVVIUlZTM0VYV1VDakh0UVBrZm9lV0h3bllKZUZ6Vm94eEZNMVJHaklWUHIyYmsKbVBQOUZTaEZ5TDE3eGsvSVlmSkZiMXl1cjZEUnc5RmdFS2hlZENkQlBXbVN2dElxT1pta1ByQTk4ZDM1UWtIVAo0UzU5TFNFb1dSR1BkeVI3T3krUFZpaFl6NDV4N3BFZ3BXTVVSenRSYTRtWnIvTmx4bXNMZXJWb1ZNdz0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+    server: https://sample-haproxy:6443
+  name: sample-kube-cluster
+contexts:
+- context:
+    cluster: sample-kube-cluster
+    user: kubernetes-admin
+  name: kubernetes-admin@sample-kube-cluster
+current-context: kubernetes-admin@sample-kube-cluster
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM4akNDQWRxZ0F3SUJBZ0lJREdETWtkblhCRll3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TURBeE1UUXdOakU1TkRWYUZ3MHlNVEF4TVRNd05qRTVORGhhTURReApGekFWQmdOVkJBb1REbk41YzNSbGJUcHRZWE4wWlhKek1Sa3dGd1lEVlFRREV4QnJkV0psY201bGRHVnpMV0ZrCmJXbHVNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQXV6ZHFXblRhLzBkL1VmU2oKek56djhQTG43OHU3R21QL2Y3b2pvZ1Z5aDFjU0RBdld5Q2h0Myt2ZFdyRDZwK1VYYTdwOHVzRCsvcFZodUdobgpCdTFSZ3MzK1QxaWhybVFCZys1cTVyb1B2aEpQQnowNllYUHVLREFsT2NjNkRlclUrdGo2cGdqbnNwbTlyRU00CnpXR29MbU1oTzB5OHBXcndMZEFGWXQ4OTJ1WjhJcVRNZzgzRGplZ1NLem0rSklEdTJFZUJoVy81NHJXWnA3Qk8KU01iRVVZVmRoVzFkcGlWYnA3WExZdWUxUXFnT2FDbUM1c2c0RVRBQklBZEgyVDFIdENoaVpWbzRHSkphNlFrcwpWSnNpQ3Q2a3Avd21TTGEzRHRXNXZab3ZqcHR2WnFDTFRHb1JXK2VOUGN1cUk5VEFvcFlCNGRoSVdtSmhqbzdlCmZrblpHUUlEQVFBQm95Y3dKVEFPQmdOVkhROEJBZjhFQkFNQ0JhQXdFd1lEVlIwbEJBd3dDZ1lJS3dZQkJRVUgKQXdJd0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJT0lib2FRVUhYWUE5M0FvWjBMWGxkcS84MkI2ZHcwSFlIZwpBdkRmTHpTcENGWml4OHNCcmh5YjdzeTlKOWRjY3VrcHpXMmlPaURmMm16b21RSkJiVEVGdG9hVlRLRUUwU2J4CjEwOERPNkV3MjJaRmFheTdscktnMEllTkRmajd1N3hINmIyakZod3dEY1E1MHNKU2lYVkVyMWxvelgvbTV2YUoKV3NycWZpVFlHR3hWTXFRd0pIam1XYmFiQ0tLVi9td0ZqWlVhSk5hckhFTnRHYm5XdkdGRmVQZkNmMEpPRTlhYwpUZDBDR3hmSVdtb1BwdURuR0drUGpHK3pNMmlFZzZRTmlsZnV2QTBGeDBZcnBtcFJzN2dsNGhqVEFDVDE1VDA3CjZoYWRkZmhzcGJyRC8xMG5nSkpXRGRscEhGV2VoclhOQWpmNXAvR2FESjNySDJ5Smt1RT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+    client-key-data: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBdXpkcVduVGEvMGQvVWZTanpOenY4UExuNzh1N0dtUC9mN29qb2dWeWgxY1NEQXZXCnlDaHQzK3ZkV3JENnArVVhhN3A4dXNEKy9wVmh1R2huQnUxUmdzMytUMWlocm1RQmcrNXE1cm9QdmhKUEJ6MDYKWVhQdUtEQWxPY2M2RGVyVSt0ajZwZ2puc3BtOXJFTTR6V0dvTG1NaE8weThwV3J3TGRBRll0ODkydVo4SXFUTQpnODNEamVnU0t6bStKSUR1MkVlQmhXLzU0cldacDdCT1NNYkVVWVZkaFcxZHBpVmJwN1hMWXVlMVFxZ09hQ21DCjVzZzRFVEFCSUFkSDJUMUh0Q2hpWlZvNEdKSmE2UWtzVkpzaUN0NmtwL3dtU0xhM0R0VzV2Wm92anB0dlpxQ0wKVEdvUlcrZU5QY3VxSTlUQW9wWUI0ZGhJV21KaGpvN2Vma25aR1FJREFRQUJBb0lCQUJoWGJ5dU5yLytyQXlIYgp4Z1JYNFphWmJwQ2VFNWl0MGNXQXBTdG11K3BlNXNqTUxVUGZCZElzYjU1Z0RtY1FBVWlQZWJJcWI3MFlIUm1GCjhZZFVDZG9SQUhTK21GNzlQN2t3b1pPWU0zM0tFWjVtVnBYZkplTHh4NVZJa3dMR09xVFcyMWdGSm1MeFhGanUKY0k4N21FdFh0alZvbDhxR0tlNDY4c2hWTUV5cW5CZ3ZqMjkrd2JPeTJ2TzIyM25Gd0htUG8xLzZKNC9vL0JIZQpkcG9NZkNmWSs4ZE0ycExjZGRmYVIxV1RuZUdIalY5UGIyUkFOYkNRTWFVNVRpaE1sOGZnMmJHSXErWXkrOUlTCnJUNU1qUG5WMnNwQ3ZrMHdJMkdnTHpybUFoTE0rWjhiSXRVZVg0YWN1K2dKRWxzRDd2cGJhSW5ZSlFsWHcwS3cKYjNqczhBRUNnWUVBMDBBNUdVQzNrbFFSM0s2c1NWYWpMWkRuSTUxclZTMnBkWnBKdEdheU9KUlpDTEZYb0d5Ygp1WHYvanJLbFQxNnc4dkVWejRLVHNWVkFaT1V4cW9nZnN4SXo0R3NjQmwwaDdSQ0MvMFFUWGVRT1lyQlJNeHpiCktmbkQzWW9ob3gySUFiVGJ0U2FybmZXdzlhSXc4YmNoUUc0YUZ5OW43R1BHTTFHSVpETHNXZ0VDZ1lFQTR0L1kKNjJHcVJUaWVSMUN4NUtxOUZ5SXQ1VkxXTGhnR0thekQzeTJMOWxwaTN4UnJQeHhzcmpWeE9NSFdFK1hJN3ZtWApZOWlMbUF2RHpQcE5lZkFGMEZoRkNYWTRuNHQybmhCVWNkV3VkREhJMFhPTkFuN2F1UXI4Ky93SW00OHRqYmZmCi8yT3Y4MU1aQzBCN3UrQ0NoN3k0S0RBMXp1VVNIT3QzYjZYdkR4a0NnWUJCdkFWSWQxdm4rNk1IUVk4NHp1MjkKMnc0aGhmV0ZMczFCVy80OVZZdDFrYXZXeWFCVHVoZ0c4cS9HRG83a0VMb05Ecm5UdFhVUnhFNWlWdk5LZGtzdQo1S1loMmhLQlpHK1BIZ2sxTjFDemNhaU1Td01wWFh4UkpuZ3RNck5lMTJ5ZjQxQk9vVGJiMHp6NllqcktyRXA3Cml3Y3hXYjREejlRMzJkSVFJOHhxQVFLQmdRQ2pPZWZJR2FFMllqREdJRkdNc2lhUE1VRVIvNUltNFpQMWdkMysKZ0xkMUM3eWN3UVVVQi9CTk9oZjJmTWIzMDlmSHozelRFaVlFdzFvZzdHaTNkUy9Kb09neWtZTFZqckpOc0hRQQozbnJBRUYxcURCZUVseDNvQ2ZiUG1KbmN5WnM5bmZBanYyWUV5MkYyVGZOM3pXUThJbFBnWGljb2JuaWtvK2h2ClJGUUZhUUtCZ0ZQdS9GMG5wMVptQ212WWxBYzNzQnBuQklmQ0ovSUdJRUJ3ekNLRHBad0kxVEtSdE1EV1JzdmcKY1VKejBRYjRhcXhNdkowS0dzQTRjWm5nZVdwbGNOM28yMnNDcmRUQ29XS1kzWW5oNTBKUitFbTUzOERabEFregpUQ3BJV0tvQmxmT2U1bkRtc1dTQUFVejJCOE5KZFZhclhYTXBrTng3MUhrSTdSVTJkUDBXCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==
+```
+- #### Copy Content to Your Local ~/.kube/config
+
+### Initial CNI network
+``` shell
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+```
+
+## Join Kubernetes Cluster on other Master Node
+``` shell
+export _KUBE_HAPROXY="sample-haproxy"
+export _KUBE_HAPROXY_IP="10.10.10.19"
+export _KUBE_HAPROXY_PORT="6443"
+export _KUBE_TOKEN='rvx4te.nxupiekihv8j03p7'
+export _KUBE_DISCOVERY_TOKEN_CA_CERT_HASH='sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681'
+export _KUBE_CERTIFICATE_KEY='12e3424d61ba957db5faa5bdd436874b5edd77984cac4e6789a49d7665046fd4'
+
+cat >> /etc/hosts << EOF
+
+${_KUBE_HAPROXY_IP} ${_KUBE_HAPROXY}
+EOF
+
+kubeadm join ${_KUBE_HAPROXY}:${_KUBE_HAPROXY_PORT} --token ${_KUBE_TOKEN} \
+--discovery-token-ca-cert-hash ${_KUBE_DISCOVERY_TOKEN_CA_CERT_HASH} \
+--control-plane \
+--certificate-key ${_KUBE_CERTIFICATE_KEY}
+```
+
+## Join Kubernetes Cluster on Worker Node
+``` shell
+export _KUBE_HAPROXY="sample-haproxy"
+export _KUBE_HAPROXY_IP="10.10.10.19"
+export _KUBE_HAPROXY_PORT="6443"
+export _KUBE_TOKEN='rvx4te.nxupiekihv8j03p7'
+export _KUBE_DISCOVERY_TOKEN_CA_CERT_HASH='sha256:ba59363378a9286d59b9ffccc9c0bd2d908d339b02956f139de03b2edee51681'
+
+cat >> /etc/hosts << EOF
+
+${_KUBE_HAPROXY_IP} ${_KUBE_HAPROXY}
+EOF
+
+kubeadm join ${_KUBE_HAPROXY}:${_KUBE_HAPROXY_PORT} --token ${_KUBE_TOKEN} \
+--discovery-token-ca-cert-hash ${_KUBE_DISCOVERY_TOKEN_CA_CERT_HASH}
+```
+
+## Kubernetes Dashbaord
+## Install
+``` shell
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta8/aio/deploy/recommended.yaml
+```
+
+## Create Admin Service Account
+### Create Service Account
+``` shell
+cat << EOF | kubectl create -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kube-system
+EOF
+```
+
+### Describe cluster-admin Cluster Roles
+``` shell
+kubectl describe clusterrole/cluster-admin
+```
+
+#### Output
+``` shell
+Name:         cluster-admin
+Labels:       kubernetes.io/bootstrapping=rbac-defaults
+Annotations:  rbac.authorization.kubernetes.io/autoupdate: true
+PolicyRule:
+  Resources  Non-Resource URLs  Resource Names  Verbs
+  ---------  -----------------  --------------  -----
+  *.*        []                 []              [*]
+             [*]                []              [*]
+```
+
+### Grant cluster-admin roles for admin-user
+``` shell
+cat << EOF | kubectl create -f -
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kube-system
+EOF
+```
+
+## Vefiry admin-user Grant
+``` shell
+kubectl describe ClusterRoleBinding/admin-user
+```
+
+## Get admin-user token
+``` shell
+kubectl describe secret -n kube-system $(kubectl get secret -n kube-system -o name | grep admin-user | awk -F '/' '{ print $NF }') | awk '$1=="token:" { print $2 }'
+```
+
+#### Output
+``` shell
+eyJhbGciOiJSUzI1NiIsImtpZCI6IjdQYlB1bWhQUjZ0V3ZpMVFUeldrR2ZvVjZmTjhjWDZGSGE4VFlWbzFDeUkifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlLXN5c3RlbSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi11c2VyLXRva2VuLTV2NTh0Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFkbWluLXVzZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI2YTBlODRmNS04MzlhLTQyNTEtOTFmZi1iN2Q1NDM3NzFkYTUiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZS1zeXN0ZW06YWRtaW4tdXNlciJ9.LEQmHMxchmb06C2AkpSVys39oce8I5zQxGBXFa9hmB7R1IWCxM4BYoHWc_L9ooYodxIlN63SJ6wVtgxScuHv1TZfnwDrMzzVz6N2TOOyjUW_2DQvGfgYSrykVG2_yRlm8txLYQZiRybtNMaYXifcOWOC87ryBrpzYRotUOjXAQToyfE5NnDtJR3mwDFEXXQwSmya11WwWQ4zmyriaQY6D3LC0Uy376sKPArVtiZRuKwFh11uQn_IuCUTbHqMmz6ZSkiwa23-dVrXEVrx5qfh9fNC3GhWEeVBK_3EwRx0b5f-KynoIjsq4zZ8IXD52Jc-ReqYd2KNqb92OBUiwCtFfw
+```
+
+## Create Kubernetes Dashbaord Proxy
+``` shell
+kubectl proxy
+```
+
+## Open Browser
+### [Dashboard](http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/)
+#### `Paste Token above`
+
+## Metrics Server
+## At All Kubernetes Nodes
+### Enable serverTLSBootstrap in kubelet configuration
+``` shell
+echo "serverTLSBootstrap: true" >> /var/lib/kubelet/config.yaml
+systemctl restart kubelet
+```
+
+## Approve certificate
+``` shell
+export _KUBE_CSR=$(kubectl get csr | egrep -i 'pending$' | awk '{ print $1 }')
+for i in ${_KUBE_CSR}; do kubectl certificate approve ${i}; done
+```
+
+## Initial metrics-server
+``` shell
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.6/components.yaml
+kubectl -n kube-system patch deployment metrics-server --patch '{"spec": {"template": {"spec": {"hostNetwork": true}}}}'
+```
+
+### Check apiservice
+``` shell
+kubectl -n kube-system get apiservice v1beta1.metrics.k8s.io
+```
+
+#### Output
+``` shell
+NAME                     SERVICE                      AVAILABLE   AGE
+v1beta1.metrics.k8s.io   kube-system/metrics-server   True        19s
+```
+
+### Check node resource usage
+``` shell
+kubectl top nodes
+```
+
+#### Output
+``` shell
+NAME                     CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%
+sample-kube-master-001   115m         5%     1053Mi          64%
+sample-kube-master-002   90m          4%     1029Mi          62%
+sample-kube-master-003   86m          4%     1020Mi          62%
+sample-kube-worker-001   35m          0%     864Mi           5%
+sample-kube-worker-002   35m          0%     886Mi           5%
+sample-kube-worker-003   34m          0%     884Mi           5%
 ```
