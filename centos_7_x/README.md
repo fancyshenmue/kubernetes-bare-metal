@@ -24,6 +24,7 @@
     - [Get Kubernetes API Config](#Get-Kubernetes-API-Config)
     - [Initial CNI network](#Initial-CNI-network)
     - [Join Kubernetes Cluster on other Master Node](#Join-Kubernetes-Cluster-on-other-Master-Node)
+    - [Join Kubernetes Cluster on Worker Node](#Join-Kubernetes-Cluster-on-Worker-Node)
   - [Kubernetes Dashbaord](#Kubernetes-Dashbaord)
   - [Metrics Server](#Metrics-Server)
   - [Kubernetes Nginx Ingress](#Kubernetes-Nginx-Ingress)
