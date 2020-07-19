@@ -26,6 +26,8 @@
     - [Join Kubernetes Cluster on other Master Node](#Join-Kubernetes-Cluster-on-other-Master-Node)
   - [Kubernetes Dashbaord](#Kubernetes-Dashbaord)
   - [Metrics Server](#Metrics-Server)
+  - [Kubernetes Nginx Ingress](#Kubernetes-Nginx-Ingress)
+  - [Kubernetes MetalLB](#Kubernetes-MetalLB)
 
 ## Requirement
 - CentOS 7.x * 8
@@ -928,4 +930,52 @@ sample-kube-master-003   86m          4%     1020Mi          62%
 sample-kube-worker-001   35m          0%     864Mi           5%
 sample-kube-worker-002   35m          0%     886Mi           5%
 sample-kube-worker-003   34m          0%     884Mi           5%
+```
+
+## Kubernetes Nginx Ingress
+``` shell
+git clone https://github.com/nginxinc/kubernetes-ingress
+cd kubernetes-ingress/deployments
+git checkout v1.7.2
+
+# Configure RBAC
+kubectl apply -f common/ns-and-sa.yaml
+kubectl apply -f rbac/rbac.yaml
+
+# Create Common Resources
+kubectl apply -f common/default-server-secret.yaml
+kubectl apply -f common/nginx-config.yaml
+kubectl apply -f common/vs-definition.yaml
+kubectl apply -f common/vsr-definition.yaml
+kubectl apply -f common/ts-definition.yaml
+kubectl apply -f common/gc-definition.yaml
+kubectl apply -f common/global-configuration.yaml
+
+# Deploy the Ingress Controller
+kubectl apply -f daemon-set/nginx-ingress.yaml
+```
+
+## Kubernetes MetalLB
+## Apply MetalLB Service
+``` shell
+kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.3/manifests/metallb.yaml
+```
+
+## Assign IP Range (Layer 2)
+``` shell
+export _KUBE_IP_RANGE="10.10.10.21-10.10.10.30"
+cat << EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: default
+      protocol: layer2
+      addresses:
+      - ${_KUBE_IP_RANGE}
+EOF
 ```
